@@ -60,31 +60,40 @@ public class LoggerFilter implements Filter {
         if (config != null && config.getHttpLogger() != null && config.getHttpLogger().getPath() != null) {
             LOG.debug("init LoggerFilter");
             for (Entry<String, Object> me : config.getHttpLogger().getPath().entrySet()) {
-                String vs[] = ((String) me.getValue()).split(",");
+            	Object ov = me.getValue();
                 int flag = 0;
-                for (String v : vs) {
-                    if ("OFF".equalsIgnoreCase(v)) {
-                        flag = FLAG_OFF;
-                    } else if ("BASIC".equalsIgnoreCase(v)) {
-                        flag |= FLAG_BASIC;
-                    } else if ("HEADER".equalsIgnoreCase(v)) {
-                        flag |= FLAG_HEADER;
-                    } else if ("SESSION".equalsIgnoreCase(v)) {
-                        flag |= FLAG_SESSION;
-                    } else if ("REQUEST".equalsIgnoreCase(v)) {
-                        flag |= FLAG_REQUEST;
-                    } else if ("RESPONSE".equalsIgnoreCase(v)) {
-                        flag |= FLAG_RESPONSE;
-                    } else if ("REQUEST_PRETTY".equalsIgnoreCase(v)) {
-                        flag |= FLAG_REQUEST_PRETTY;
-                    } else if ("RESPONSE_PRETTY".equalsIgnoreCase(v)) {
-                        flag |= FLAG_RESPONSE_PRETTY;
-                    } else if ("ALL".equalsIgnoreCase(v)) {
-                        flag |= FLAG_ALL;
-                    } else {
-                        throw new RuntimeException("Not supported flag '"+v+"' in "+me.getKey()+" = "+me.getValue());
-                    }
-                }
+            	if (ov instanceof Boolean) {
+            		if ((Boolean) ov) {
+            			flag = FLAG_ALL;
+            		} else {
+            			flag = FLAG_OFF;
+            		}
+            	} else {
+	                String vs[] = ((String) ov).split(",");
+	                for (String v : vs) {
+	                    if ("OFF".equalsIgnoreCase(v)) {
+	                        flag = FLAG_OFF;
+	                    } else if ("BASIC".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_BASIC;
+	                    } else if ("HEADER".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_HEADER;
+	                    } else if ("SESSION".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_SESSION;
+	                    } else if ("REQUEST".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_REQUEST;
+	                    } else if ("RESPONSE".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_RESPONSE;
+	                    } else if ("REQUEST_PRETTY".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_REQUEST_PRETTY;
+	                    } else if ("RESPONSE_PRETTY".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_RESPONSE_PRETTY;
+	                    } else if ("ALL".equalsIgnoreCase(v)) {
+	                        flag |= FLAG_ALL;
+	                    } else {
+	                        throw new RuntimeException("Not supported flag '"+v+"' in "+me.getKey()+" = "+me.getValue());
+	                    }
+	                }
+            	}
                 matchers.add(new Matcher(me.getKey(), flag));
                 if (LOG.isDebugEnabled()) LOG.debug("Logging '"+me.getKey()+"' "+me.getValue()+"    "+Integer.toHexString(flag).toUpperCase());
             }
@@ -148,7 +157,6 @@ public class LoggerFilter implements Filter {
                         if (session != null) {
                             sb.append("\nSession id: "+session.getId());
                         }
-                        sb.append("\nRemote user: "+hreq.getRemoteUser());
                     }
     
                     doLog(sb.toString());
@@ -160,9 +168,29 @@ public class LoggerFilter implements Filter {
     
                     if (xreq instanceof RequestWrapper) {
                         byte bb[] = ((RequestWrapper) xreq).toByteArray();
+                        sb.setLength(0);
+                        sb.append("Request ["+reqid+"]  "+url);
                         if (bb.length > 0) {
-                            doLog("Request ["+reqid+"]  "+url+"\nBody len: "+bb.length+"\n"+U.toString(bb));
+                            String ct = ((RequestWrapper) xreq).getContentType();
+                            if (ct != null && ct.startsWith("application/json")) {
+                                try {
+                                    ObjectMapper om = new ObjectMapper();
+                                    om.enable(SerializationFeature.INDENT_OUTPUT);
+                                    Object json = om.readValue(bb, Object.class);
+                                    String str = om.writeValueAsString(json);
+                                    sb.append("\nBody prettified len: ").append(bb.length).append('\n');
+                                    sb.append(str);
+                                } catch (Exception e) {
+                                	LOG.warn(e.getMessage(), e);
+                                    sb.append("\nBody len: ").append(bb.length).append('\n');
+                                    sb.append(U.toString(bb));
+                                }
+                            } else {
+                                sb.append("\nBody len: ").append(bb.length).append('\n');
+                                sb.append(U.toString(bb));
+                            }
                         }
+                        doLog(sb.toString());
                     }
                     
                     if (xres instanceof ResponseWrapper) {
@@ -177,11 +205,18 @@ public class LoggerFilter implements Filter {
                                 if ((flag & FLAG_RESPONSE_PRETTY) != 0) {
                                     String ct = ((ResponseWrapper) xres).getContentType();
                                     if (ct != null && ct.startsWith("application/json")) {
-                                        sb.append("Body prettified len: ").append(bb.length).append('\n');
-                                        ObjectMapper om = new ObjectMapper();
-                                        om.enable(SerializationFeature.INDENT_OUTPUT);
-                                        Object json = om.readValue(bb, Object.class);
-                                        sb.append(om.writeValueAsString(json));
+                                        try {
+	                                        ObjectMapper om = new ObjectMapper();
+	                                        om.enable(SerializationFeature.INDENT_OUTPUT);
+	                                        Object json = om.readValue(bb, Object.class);
+	                                        String str = om.writeValueAsString(json);
+	                                        sb.append("Body prettified len: ").append(bb.length).append('\n');
+	                                        sb.append(str);
+                                        } catch (Exception e) {
+                                        	LOG.warn(e.getMessage(), e);
+                                            sb.append("Body len: ").append(bb.length).append('\n');
+                                            sb.append(U.toString(bb));
+                                        }
                                     } else {
                                         sb.append("Body len: ").append(bb.length).append('\n');
                                         sb.append(U.toString(bb));
