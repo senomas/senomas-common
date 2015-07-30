@@ -134,8 +134,9 @@ public class LoggerFilter implements Filter {
             if (flag > 0) {
                 final long reqid  = counter++;
                 StringBuilder sb = new StringBuilder();
+                HttpServletRequest xreq = null;
                 try {
-                    sb.append("Request [").append(reqid).append("]  ").append(url);
+                    sb.append("Request [").append(reqid).append("]  ").append(hreq.getMethod()).append(' ').append(url);
                     if ((flag & FLAG_HEADER) != 0) {
                         sb.append("\nHeaders:");
                         for (Enumeration<?> e = hreq.getHeaderNames(); e.hasMoreElements(); ) {
@@ -161,7 +162,7 @@ public class LoggerFilter implements Filter {
     
                     doLog(sb.toString());
                     
-                    HttpServletRequest xreq = ((flag & FLAG_REQUEST) != 0) ? new RequestWrapper(hreq) : hreq;
+                    xreq = ((flag & FLAG_REQUEST) != 0) ? new RequestWrapper(hreq) : hreq;
                     HttpServletResponse xres = ((flag & FLAG_HEADER) != 0 || (flag & FLAG_RESPONSE) != 0 || (flag & FLAG_RESPONSE_PRETTY) != 0) ? new ResponseWrapper(hresp) : hresp;
                     
                     chain.doFilter(xreq, xres);
@@ -235,9 +236,63 @@ public class LoggerFilter implements Filter {
                     
                     return;
                 } catch (IOException e) {
+                    if (xreq instanceof RequestWrapper) {
+                        byte bb[] = ((RequestWrapper) xreq).toByteArray();
+                        sb.setLength(0);
+                        sb.append("Request ["+reqid+"]  "+url);
+                        if (bb.length > 0) {
+                            String ct = ((RequestWrapper) xreq).getContentType();
+                            if (ct != null && ct.startsWith("application/json")) {
+                                try {
+                                    ObjectMapper om = new ObjectMapper();
+                                    om.enable(SerializationFeature.INDENT_OUTPUT);
+                                    Object json = om.readValue(bb, Object.class);
+                                    String str = om.writeValueAsString(json);
+                                    sb.append("\nBody prettified len: ").append(bb.length).append('\n');
+                                    sb.append(str);
+                                } catch (Exception e2) {
+                                	LOG.warn(e.getMessage(), e2);
+                                    sb.append("\nBody len: ").append(bb.length).append('\n');
+                                    sb.append(U.toString(bb));
+                                }
+                            } else {
+                                sb.append("\nBody len: ").append(bb.length).append('\n');
+                                sb.append(U.toString(bb));
+                            }
+                        }
+                        doLog(sb.toString());
+                    }
+                	
                     LOG.error("Error  ["+reqid+"]  "+url+"\n"+e.getMessage(), e);
                     throw e;
                 } catch (ServletException e) {
+                    if (xreq instanceof RequestWrapper) {
+                        byte bb[] = ((RequestWrapper) xreq).toByteArray();
+                        sb.setLength(0);
+                        sb.append("Request ["+reqid+"]  "+url);
+                        if (bb.length > 0) {
+                            String ct = ((RequestWrapper) xreq).getContentType();
+                            if (ct != null && ct.startsWith("application/json")) {
+                                try {
+                                    ObjectMapper om = new ObjectMapper();
+                                    om.enable(SerializationFeature.INDENT_OUTPUT);
+                                    Object json = om.readValue(bb, Object.class);
+                                    String str = om.writeValueAsString(json);
+                                    sb.append("\nBody prettified len: ").append(bb.length).append('\n');
+                                    sb.append(str);
+                                } catch (Exception e2) {
+                                	LOG.warn(e.getMessage(), e2);
+                                    sb.append("\nBody len: ").append(bb.length).append('\n');
+                                    sb.append(U.toString(bb));
+                                }
+                            } else {
+                                sb.append("\nBody len: ").append(bb.length).append('\n');
+                                sb.append(U.toString(bb));
+                            }
+                        }
+                        doLog(sb.toString());
+                    }
+                    
                     LOG.error("Error  ["+reqid+"]  "+url+"\n"+e.getMessage(), e);
                     throw e;
                 }

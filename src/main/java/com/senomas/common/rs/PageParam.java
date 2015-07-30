@@ -2,6 +2,8 @@ package com.senomas.common.rs;
 
 import java.util.Arrays;
 
+import javax.persistence.criteria.CriteriaBuilder;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
@@ -52,6 +54,13 @@ public class PageParam {
 			}
 			return new PageRequest(page, size, new Sort(orders));
 		}
+	}
+	
+	public Class<?>[] getRoots() {
+		return null;
+	}
+	
+	public void where(CriteriaBuilder builder) {
 	}
 
 	@Override
